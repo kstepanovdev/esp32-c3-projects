@@ -4,35 +4,59 @@
 use core::fmt::Write;
 use esp_backtrace as _;
 use esp_hal::{
-    clock::ClockControl,
-    delay::Delay,
-    gpio::{Io, Level, Output},
-    peripherals::Peripherals,
-    prelude::*,
-    system::SystemControl,
-    uart::Uart,
+    clock::ClockControl, delay::Delay, gpio::Io, peripherals::Peripherals, prelude::*,
+    rtc_cntl::Rtc, system::SystemControl, timer::timg::TimerGroup, uart::Uart,
 };
+use esp_println::{print, println};
+use heapless::Vec;
+use nb::block;
 
 #[entry]
 fn main() -> ! {
     let peripherals = Peripherals::take();
     let system = SystemControl::new(peripherals.SYSTEM);
+    let clocks = ClockControl::boot_defaults(system.clock_control).freeze();
 
-    let clocks = ClockControl::max(system.clock_control).freeze();
-    let delay = Delay::new(&clocks);
     let io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
 
-    let mut uart0 = Uart::new(peripherals.UART1, &clocks, io.pins.gpio21, io.pins.gpio20).unwrap();
-    let mut led = Output::new(io.pins.gpio7, Level::Low);
+    // disable watchdogs
+    let mut rtc = Rtc::new(peripherals.LPWR, None);
+    rtc.rwdt.disable();
+    rtc.swd.disable();
 
-    esp_println::logger::init_logger_from_env();
+    let timg0 = TimerGroup::new_async(peripherals.TIMG0, &clocks);
+    let mut wdt0 = timg0.wdt;
+    wdt0.disable();
 
-    let mut blink_counter = 0;
+    let timg1 = TimerGroup::new_async(peripherals.TIMG1, &clocks);
+    let mut wdt1 = timg1.wdt;
+    wdt1.disable();
+
+    let uart0 = Uart::new(peripherals.UART0, &clocks, io.pins.gpio21, io.pins.gpio20).unwrap();
+    let (mut tx, mut rx) = uart0.split();
+
+    let delay = Delay::new(&clocks);
+
+    let mut read_buffer: Vec<u8, 32> = Vec::new();
 
     loop {
-        led.toggle();
-        blink_counter += 1;
-        write!(uart0, "Blinked {:?} times\r\n", blink_counter).unwrap();
-        delay.delay(500.millis());
+        if read_buffer.len() >= 32 {
+            println!("Read buffer has been overflown");
+        }
+
+        let byte = rx.read_byte().unwrap();
+        println!("{}", byte as char);
+        if byte == b'\n' {
+            println!("{}", byte);
+            for byte in read_buffer.iter() {
+                println!("{:?}", *byte as char);
+                println!("\r\n");
+            }
+            read_buffer.clear();
+        } else {
+            println!("{}", byte);
+            read_buffer.push(byte).unwrap();
+        }
+        delay.delay_millis(200);
     }
 }
