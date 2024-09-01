@@ -3,7 +3,12 @@
 
 use esp_backtrace as _;
 use esp_hal::{
-    clock::ClockControl, delay::Delay, peripherals::Peripherals, prelude::*, system::SystemControl,
+    clock::ClockControl,
+    delay::Delay,
+    gpio::{Io, Level, Output},
+    peripherals::Peripherals,
+    prelude::*,
+    system::SystemControl,
 };
 
 #[entry]
@@ -14,10 +19,14 @@ fn main() -> ! {
     let clocks = ClockControl::max(system.clock_control).freeze();
     let delay = Delay::new(&clocks);
 
+    let io = Io::new(peripherals.GPIO.into(), peripherals.IO_MUX.into());
+
+    let mut led = Output::new(io.pins.gpio7, Level::Low);
+
     esp_println::logger::init_logger_from_env();
 
     loop {
-        log::info!("Hello world!");
-        delay.delay(500.millis());
+        led.toggle();
+        delay.delay_millis(500);
     }
 }

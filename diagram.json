@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "author": "kstepanovdev",
+    "editor": "wokwi",
+    "parts": [ { "id": "esp", "type": "board-esp32-c3-rust-1", "attrs": { "builder": "rust-nostd-esp" } } ],
+    "connections": [ [ "esp:21", "$serialMonitor:RX", "" ], [ "esp:20", "$serialMonitor:TX", "" ] ],
+    "serialMonitor": { "display": "terminal", "convertEol": true }
+  }
